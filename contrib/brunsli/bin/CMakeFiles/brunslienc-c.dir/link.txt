@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC   -shared -Wl,-soname,libbrunslienc-c.so -o libbrunslienc-c.so CMakeFiles/brunslienc-c.dir/c/enc/encode.cc.o  libbrunslienc-static.a third_party/brotli/libbrotlienc-static.a third_party/brotli/libbrotlicommon-static.a -lm libbrunslicommon-static.a 

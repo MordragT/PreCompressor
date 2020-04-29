@@ -1,0 +1,2 @@
+/usr/bin/ar qc libbrunslienc-static.a  CMakeFiles/brunslienc-static.dir/c/enc/ans_encode.cc.o CMakeFiles/brunslienc-static.dir/c/enc/brunsli_encode.cc.o CMakeFiles/brunslienc-static.dir/c/enc/context_map_encode.cc.o CMakeFiles/brunslienc-static.dir/c/enc/histogram_encode.cc.o CMakeFiles/brunslienc-static.dir/c/enc/jpeg_data_reader.cc.o CMakeFiles/brunslienc-static.dir/c/enc/jpeg_huffman_decode.cc.o CMakeFiles/brunslienc-static.dir/c/enc/write_bits.cc.o
+/usr/bin/ranlib libbrunslienc-static.a

@@ -1,0 +1,1 @@
+/usr/bin/c++    -rdynamic CMakeFiles/dbrunsli.dir/c/tools/dbrunsli.cc.o  -o dbrunsli  libbrunslidec-static.a third_party/brotli/libbrotlidec-static.a third_party/brotli/libbrotlicommon-static.a -lm libbrunslicommon-static.a 

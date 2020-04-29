@@ -1,0 +1,184 @@
+#!/usr/bin/python3
+
+import os
+import data
+import zipfile
+import json
+import sys
+import tarfile
+import getopt
+import shutil
+import pathlib
+import ffmpy
+import zlib
+import ctypes
+import tqdm
+
+packmp3 = ctypes.cdll.LoadLibrary(sys.path[0] + '/lib/libpackmp3.so')
+packjpg = ctypes.cdll.LoadLibrary(sys.path[0] + '/lib/libpackjpg.so')
+
+class Compression:
+    def __init__(self, root_directory):
+        self.root_directory = root_directory
+
+    def enflate(self):
+        for directory in self.file_list:
+            with open(directory, 'rb') as read_file:
+                info = data.get(read_file.read(128))
+                if info.mime:
+                    if 'application/zip' in info.mime:
+                        destination = read_file.name + '.bak'
+                        os.mkdir(destination)
+                        os.chdir(destination)
+                        with zipfile.ZipFile(read_file) as archive:
+                            archive.extractall()
+                            for subdir, dirs, files in os.walk(destination):
+                                for file in files:
+                                    self.file_list.append(os.path.join(subdir, file))
+                    elif 'audio/wav' in info.mime:
+                        destination = read_file.name + '.ogg'
+                        ff = ffmpy.FFmpeg(
+                            inputs={read_file.name: None},
+                            outputs={destination: None}
+                        )
+                        ff.run()
+                        self.tar_add.append(pathlib.PurePath(destination).relative_to(self.root_directory))
+                    elif 'audio/mpeg' in info.mime:
+                        destination = read_file.name + '.pmp'
+                        msg = ctypes.create_string_buffer(196)
+                        mp3 = ctypes.cast(ctypes.create_string_buffer(read_file.name.encode()),ctypes.POINTER(ctypes.c_char))
+                        pmp = ctypes.cast(ctypes.create_string_buffer(destination.encode()),ctypes.POINTER(ctypes.c_char))
+                        packmp3._Z24pmplib_convert_file2filePcS_S_(mp3, pmp, msg)
+                        self.tar_add.append(pathlib.PurePath(destination).relative_to(self.root_directory))
+                    elif 'image/jpeg' in info.mime:
+                        destination = read_file.name + '.pjg'
+                        msg = ctypes.create_string_buffer(196)
+                        jpg = ctypes.cast(ctypes.create_string_buffer(read_file.name.encode()),ctypes.POINTER(ctypes.c_char))
+                        pjg = ctypes.cast(ctypes.create_string_buffer(destination.encode()),ctypes.POINTER(ctypes.c_char))
+                        packjpg._Z24pjglib_convert_file2filePcS_S_(jpg,pjg,msg)
+                        self.tar_add.append(pathlib.PurePath(destination).relative_to(self.root_directory))
+                    else:
+                        print('mime not implemented:')
+                        print(info.mime)
+                        continue
+                    self.cleanup.append(destination)
+                    json_element = {
+                        "directory": os.fspath(pathlib.PurePath(directory).relative_to(self.root_directory)),
+                        "mime": info.mime,
+                        "destination": os.path.basename(destination),
+                    }
+                    self.json_data.append(json_element)
+                else:
+                    self.tar_add.append(pathlib.PurePath(directory).relative_to(self.root_directory))
+
+    def compress(self):
+        os.chdir(self.root_directory)
+        self.root_directory = os.getcwd()
+        self.file_list = []
+        for subdir, dirs, files in os.walk(os.getcwd()):
+            for file in files:
+                self.file_list.append(os.path.join(subdir, file))
+        self.tar_add = []
+        self.cleanup = []
+        self.json_data = []
+        self.enflate()
+        os.chdir(os.path.dirname(self.root_directory))
+        with tarfile.open(self.root_directory + '.tar.xz', 'x:xz') as tar:
+            with open('archive.json', 'w') as file:
+                json.dump(list(reversed(self.json_data)), file)
+            tar.add('archive.json')
+            os.remove('archive.json')
+            os.chdir(self.root_directory)
+            for file in self.tar_add:
+                tar.add(file)
+        self.cleanup.reverse()
+        for file in self.cleanup:
+            if os.path.isdir(file): shutil.rmtree(file)
+            else: os.remove(file)
+        print('Done!')
+
+
+class Decompression:
+
+    def __init__(self, root_file):
+        self.root_file = root_file
+
+    def decompress(self):
+        with tarfile.open(self.root_file) as tar:
+            try:
+                tar.getmember('archive.json')
+            except KeyError:
+                print('Error seems like the chosen file was not precompressed.')
+                sys.exit(4)
+            if not os.path.isdir('output'):
+                os.mkdir('output')
+            os.chdir('output')
+            root_directory = os.getcwd()
+            tar.extractall()
+        with open('archive.json') as file:
+            data = json.load(file)
+            for element in data:
+                if not os.path.exists(os.path.basename(element['directory'])):
+                    if os.path.dirname(element['directory']):
+                        os.chdir(os.path.dirname(element['directory']))
+                    if 'application/zip' in element['mime']:
+                        with zipfile.ZipFile(os.path.basename(element['directory']), 'w', zipfile.ZIP_DEFLATED) as archive:
+                            for subdir, dirs, files in os.walk(element['destination']):
+                                for file in files:
+                                    os.chdir(element['destination'])
+                                    archive.write(pathlib.PurePath(os.path.join(subdir, file)).relative_to(element['destination']))
+                                    os.chdir(os.path.dirname(os.getcwd()))
+                    elif 'audio/wav' in element['mime']:
+                        ff = ffmpy.FFmpeg(
+                            inputs={element['destination']: None},
+                            outputs={os.path.basename(element['directory']): None}
+                        )
+                        ff.run()
+                    elif 'audio/mpeg' in element['mime']:
+                        msg = ctypes.create_string_buffer(196)
+                        pmp = ctypes.cast(ctypes.create_string_buffer(element['destination'].encode()),ctypes.POINTER(ctypes.c_char))
+                        mp3 = ctypes.cast(ctypes.create_string_buffer(os.path.basename(element['directory']).encode()),ctypes.POINTER(ctypes.c_char))
+                        packmp3._Z24pmplib_convert_file2filePcS_S_(pmp, mp3, msg)
+                    elif 'image/jpeg' in element['mime']:
+                        msg = ctypes.create_string_buffer(196)
+                        pjg = ctypes.cast(ctypes.create_string_buffer(element['destination'].encode()),ctypes.POINTER(ctypes.c_char))
+                        jpg = ctypes.cast(ctypes.create_string_buffer(os.path.basename(element['directory']).encode()),ctypes.POINTER(ctypes.c_char))
+                        packjpg._Z24pjglib_convert_file2filePcS_S_(pjg, jpg, msg)
+                    if os.path.isfile(element['destination']):
+                        os.remove(element['destination'])
+                    elif os.path.isdir(element['destination']):
+                        shutil.rmtree(element['destination'])
+                os.chdir(root_directory)
+        os.remove('archive.json')
+
+def print_usage():
+    print('Usage: precompressor [Options]\n')
+    print('When run without options, precompressor compresses the current directory\n')
+    print('\t-h\t--help\tShow this help page')
+    print('\t-x\t--compress\tCompress the spcified Directory')
+    print('\t-i\t--input\tDecompress specified file')
+    sys.exit(2)
+
+def main(argv):
+    try:
+        opts, args = getopt.getopt(argv,'hi:x:',['help', 'input=', 'compress='])
+    except getopt.GetoptError:
+        print_usage()
+
+    for opt, arg in opts:
+        if opt in ('-h', '--help'): print_usage()
+        if opt in ('-i', '--input'):
+            if not os.path.isfile(arg):
+                print('Error the specified File does not exists.')
+                sys.exit(3)
+            else:
+                Decompression(arg).decompress()
+        if opt in ('-x', '--compress'):
+            if not os.path.isdir(arg):
+                print('Error the specified Directory does not exists.')
+                sys.exit(3)
+            else:
+                Compression(arg).compress()
+
+if __name__ == '__main__':
+    main(sys.argv[1:])
