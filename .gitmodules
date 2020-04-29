@@ -1,0 +1,9 @@
+[submodule "contrib/packJPG"]
+	path = contrib/packJPG
+	url = git@github.com:packjpg/packJPG.git
+[submodule "contrib/packMP3"]
+	path = contrib/packMP3
+	url = git@github.com:packjpg/packMP3.git
+[submodule "contrib/brunsli"]
+	path = contrib/brunsli
+	url = git@github.com:google/brunsli.git
