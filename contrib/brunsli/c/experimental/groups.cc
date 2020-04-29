@@ -219,7 +219,7 @@ bool EncodeGroups(const brunsli::JPEGData& jpg, uint8_t* data, size_t* len,
   (*executor)(encode_ac, ac_state.size());
 
   // Groups workflow: merge histograms.
-  // TODO: SIMDify.
+  // TODO(eustas): SIMDify.
   state.entropy_source.Resize(num_contexts);
   for (size_t y = 0; y < h_dc; ++y) {
     for (size_t x = 0; x < w_dc; ++x) {
@@ -237,7 +237,7 @@ bool EncodeGroups(const brunsli::JPEGData& jpg, uint8_t* data, size_t* len,
   std::vector<std::vector<uint8_t>> output;
   output.resize(1 + dc_state.size() + ac_state.size());
 
-  // TODO: pull entropy codes serialization "side effect".
+  // TODO(eustas): pull entropy codes serialization "side effect".
   {
     std::vector<uint8_t>& part = output[0];
     state.entropy_codes = entropy_codes.get();
@@ -245,10 +245,10 @@ bool EncodeGroups(const brunsli::JPEGData& jpg, uint8_t* data, size_t* len,
     for (size_t i = 0; i < jpg.inter_marker_data.size(); ++i) {
       part_size += 5 + jpg.inter_marker_data[i].size();
     }
-    for (const std::string& data : jpg.app_data) part_size += data.size();
-    for (const std::string& data : jpg.com_data) part_size += data.size();
+    for (const std::string& chunk : jpg.app_data) part_size += chunk.size();
+    for (const std::string& chunk : jpg.com_data) part_size += chunk.size();
     part_size += jpg.tail_data.size();
-    // TODO: take into account histograms.
+    // TODO(eustas): take into account histograms.
     part.resize(part_size);
     uint32_t skip_flags =
         (1u << brunsli::kBrunsliDCDataTag) | (1u << brunsli::kBrunsliACDataTag);
@@ -265,7 +265,7 @@ bool EncodeGroups(const brunsli::JPEGData& jpg, uint8_t* data, size_t* len,
     idx--;
     if (idx < dc_state.size()) {
       State& s = dc_state[idx];
-      // TODO: reduce for subsampled
+      // TODO(eustas): reduce for subsampled
       size_t part_size = 128 * (128 + 16) * jpg.components.size();
       part.resize(part_size);
       s.entropy_codes = entropy_codes.get();
@@ -281,7 +281,7 @@ bool EncodeGroups(const brunsli::JPEGData& jpg, uint8_t* data, size_t* len,
     idx -= dc_state.size();
     if (idx < ac_state.size()) {
       State& s = ac_state[idx];
-      // TODO: reduce for subsampled
+      // TODO(eustas): reduce for subsampled
       size_t part_size = 32 * 32 * 63 * jpg.components.size();
       part.resize(part_size);
       s.entropy_codes = entropy_codes.get();
@@ -392,7 +392,7 @@ bool DecodeGroups(const uint8_t* data, size_t len, brunsli::JPEGData* jpg,
     size_t x = idx % w_dc;
     State dc_state;
     dc_state.stage = Stage::SECTION;
-    dc_state.tags_met = ~(1 << brunsli::kBrunsliDCDataTag);
+    dc_state.tags_met = ~(1u << brunsli::kBrunsliDCDataTag);
     dc_state.data = dc_section_start[idx];
     dc_state.len = dc_section_length[idx];
 
@@ -416,7 +416,7 @@ bool DecodeGroups(const uint8_t* data, size_t len, brunsli::JPEGData* jpg,
           std::min<size_t>(first_y + v_group_dim, m.height_in_blocks);
       m.ac_coeffs += first_x * brunsli::kDCTBlockSize + first_y * m.ac_stride;
       m.block_state =
-          state.block_state_[c].data() + first_x + first_y * m.b_stride;
+          state.meta[c].block_state + first_x + first_y * m.b_stride;
       m.width_in_blocks = last_x - first_x;
       m.height_in_blocks = last_y - first_y;
     }
@@ -433,7 +433,7 @@ bool DecodeGroups(const uint8_t* data, size_t len, brunsli::JPEGData* jpg,
     size_t x = idx % w_ac;
     State ac_state;
     ac_state.stage = Stage::SECTION;
-    ac_state.tags_met = ~(1 << brunsli::kBrunsliACDataTag);
+    ac_state.tags_met = ~(1u << brunsli::kBrunsliACDataTag);
     ac_state.data = ac_section_start[idx];
     ac_state.len = ac_section_length[idx];
 
@@ -459,7 +459,7 @@ bool DecodeGroups(const uint8_t* data, size_t len, brunsli::JPEGData* jpg,
       m.context_offset = state.meta[c].context_offset;
       m.ac_coeffs += first_x * brunsli::kDCTBlockSize + first_y * m.ac_stride;
       m.block_state =
-          state.block_state_[c].data() + first_x + first_y * m.b_stride;
+          state.meta[c].block_state + first_x + first_y * m.b_stride;
       m.width_in_blocks = last_x - first_x;
       m.height_in_blocks = last_y - first_y;
     }
